@@ -50,9 +50,9 @@ class HexEditor:
 
             stdscr.refresh()
             self.key = stdscr.getch()
-            if self.key == ord('s') or self.key == ord('S'):
-                self.display_popup(stdscr, "Save File")
-            elif self.key == ord('q') or self.key == ord('Q'):
+            # if self.key == ord('s') or self.key == ord('S'):
+            #     self.display_popup(stdscr, "Save File")
+            if self.key == ord('q') or self.key == ord('Q'):
                 return
             self.file_manager.process_keys(self.key)
 
