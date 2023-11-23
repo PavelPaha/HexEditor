@@ -39,15 +39,19 @@ class FileManager:
         self.lines = parse_data_to_lines(self.data)
         self.cursor_row = 0
         self.cursor_col = 0
+        self.cursor_str_col = 0
         self.rows_offset = 0
+        self.in_table = True
 
     def get_formatted_lines(self):
         result = []
-        index = self.rows_offset+1
+        index = self.rows_offset + 1
+
         for line in self.lines:
             result_i1 = []
             result_i2 = b''
-            binary_number = (hex(index)[2:]+'0').rjust(8, '0')
+            binary_number = (hex(index)[2:] + '0').rjust(8, '0')
+
             for item in line:
                 ord_value = int(item, 16)
                 result_i1.append(item)
@@ -55,13 +59,24 @@ class FileManager:
                     result_i2 += bytes([ord_value])
                 except UnicodeDecodeError:
                     result_i2 += b'?'
-            index+=1
-            formatted_line = binary_number + ' ' + ' '.join(result_i1).ljust(20) + ' ' + result_i2.decode('utf-8', errors='replace')
+
+            index += 1
+            formatted_line = binary_number + ' ' + ' '.join(result_i1).ljust(48)
+            formatted_line += ''.join(
+                [bytes([item]).decode('utf-8', errors='replace') if ord(b'\x20') <= item <= ord(b'\x7E') else '.' for
+                 item in result_i2])
+
             result.append(formatted_line)
+
         return result
 
     def get_actual_position(self):
-        return self.cursor_row, self.cursor_col * 3 + 9, self.lines[self.cursor_row][self.cursor_col]
+        l = len(self.lines[self.cursor_row])
+        if self.cursor_col >= len(self.lines[self.cursor_row]):
+            answer = self.lines[self.cursor_row][self.cursor_col - l]
+            ord_value = int(answer, 16)
+            return self.cursor_row+1, len(self.lines[self.cursor_row]) * 3 + 9 + self.cursor_col - l, str(bytes([ord_value]).decode('utf-8', errors='replace'))
+        return self.cursor_row+1, self.cursor_col * 3 + 9, self.lines[self.cursor_row][self.cursor_col]
 
     def get_window_size(self):
         return sum(len(line) for line in self.lines)
@@ -89,7 +104,7 @@ class FileManager:
                 lines = parse_data_to_lines(data)
                 self.lines = lines + self.lines[:-1]
                 self.seek_pointer += self.get_window_size()
-                self.rows_offset -=1
+                self.rows_offset -= 1
                 return True
             return False
 
@@ -104,35 +119,47 @@ class FileManager:
         if key in keys:
             self.offset = 0
             if key == curses.KEY_DOWN:
-                if self.cursor_row + 1 >= len(self.lines):
-                    if not self.step_forward_window():
-                        self.cursor_row = 0
-                else:
-                    self.cursor_row += 1
+                self.shift_cursor_down()
             elif key == curses.KEY_UP:
-                if self.cursor_row == 0:
-                    if not self.step_back_window():
-                        self.cursor_row = len(self.lines) - 1
-                else:
-                    self.cursor_row -= 1
+                self.shift_cursor_up()
             elif key == curses.KEY_LEFT:
-                self.cursor_col -= 1
-                if self.cursor_col < 0:
-                    self.step_back_window()
-                    self.cursor_row = (self.cursor_row - 1 + len(self.lines)) % len(self.lines)
-                    self.cursor_col = len(self.lines[self.cursor_row]) - 1
+                self.shift_cursor_left()
             elif key == curses.KEY_RIGHT:
-                self.cursor_col += 1
-                if self.cursor_col >= len(self.lines[self.cursor_row]):
-                    if self.cursor_row + 1 < len(self.lines):
-                        self.cursor_row += 1
-                        self.cursor_col = 0
+                self.shift_cursor_right()
             elif key == ord('s'):
                 self.save_file()
 
-        if self.cursor_col >= len(self.lines[self.cursor_row]):
+        if self.cursor_col >= 2 * len(self.lines[self.cursor_row]):
             self.cursor_row = 0
             self.cursor_col = 0
+
+    def shift_cursor_right(self):
+        self.cursor_col += 1
+        if self.cursor_col >= 2 * len(self.lines[self.cursor_row]):
+            if self.cursor_row + 1 < len(self.lines):
+                self.cursor_row += 1
+                self.cursor_col = 0
+
+    def shift_cursor_left(self):
+        self.cursor_col -= 1
+        if self.cursor_col < 0:
+            self.step_back_window()
+            self.cursor_row = (self.cursor_row - 1 + len(self.lines)) % len(self.lines)
+            self.cursor_col = len(self.lines[self.cursor_row]) - 1
+
+    def shift_cursor_up(self):
+        if self.cursor_row == 0:
+            if not self.step_back_window():
+                self.cursor_row = len(self.lines) - 1
+        else:
+            self.cursor_row -= 1
+
+    def shift_cursor_down(self):
+        if self.cursor_row + 1 >= len(self.lines):
+            if not self.step_forward_window():
+                self.cursor_row = 0
+        else:
+            self.cursor_row += 1
 
     def save_file(self):
         b = self.translate_lines_to_bytes()
@@ -153,10 +180,10 @@ class FileManager:
             self.offset = (self.offset + 1) % 2
 
     def get_cur_val(self):
-        return self.lines[self.cursor_row][self.cursor_col]
+        return self.lines[self.cursor_row][self.cursor_col % len(self.lines[self.cursor_row])]
 
     def set_cur_val(self, new_val):
-        self.lines[self.cursor_row][self.cursor_col] = new_val
+        self.lines[self.cursor_row][self.cursor_col % len(self.lines[self.cursor_row])] = new_val
 
 # t = FileManager()
 #
