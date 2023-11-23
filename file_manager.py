@@ -16,12 +16,22 @@ def parse_data_to_lines(data):
     return result
 
 
+def convert_to_number(key):
+    if ord('0') <= key <= ord('9'):
+        key -= ord('0')
+    elif ord('a') <= key <= ord('f'):
+        key = key - ord('a') + 10
+    val = format(key, 'x')
+    return val
+
+
 class FileManager:
-    def __init__(self):
+    def __init__(self, file_path='t.txt'):
+        self.file_path = file_path
         self.offset = 0
         self.seek_pointer = 0
         self.window_size = 16 * 5
-        with open('t.txt', 'rb') as f:
+        with open(file_path, 'rb') as f:
             self.data = f.read(self.window_size)
 
         self.seek_pointer = len(self.data)
@@ -31,7 +41,21 @@ class FileManager:
         self.cursor_col = 0
 
     def get_formatted_lines(self):
-        return [' '.join(str(line[i]) for i in range(0, len(line))) for line in self.lines]
+        result = []
+        for line in self.lines:
+            result_i1 = []
+            result_i2 = b''
+            for item in line:
+                ord_value = int(item, 16)
+                result_i1.append(item)
+
+                try:
+                    result_i2 += bytes([ord_value])
+                except UnicodeDecodeError:
+                    result_i2 += b'?'
+            formatted_line = ' '.join(result_i1).ljust(20) + ' ' + result_i2.decode('utf-8', errors='replace')
+            result.append(formatted_line)
+        return result
 
     def get_actual_position(self):
         return self.cursor_row, self.cursor_col * 3, self.lines[self.cursor_row][self.cursor_col]
@@ -40,7 +64,7 @@ class FileManager:
         return sum(len(line) for line in self.lines)
 
     def step_forward_window(self):
-        with open('t.txt', 'rb') as f:
+        with open(self.file_path, 'rb') as f:
             f.seek(self.seek_pointer)
             data = f.read(16)
             self.seek_pointer += len(data)
@@ -51,7 +75,7 @@ class FileManager:
             return False
 
     def step_back_window(self):
-        with open('t.txt', 'rb') as f:
+        with open(self.file_path, 'rb') as f:
             sz = self.get_window_size()
             if self.seek_pointer >= sz + 16:
                 self.seek_pointer -= sz + 16
@@ -101,36 +125,37 @@ class FileManager:
             elif key == ord('s'):
                 self.save_file()
 
+        if self.cursor_col >= len(self.lines[self.cursor_row]):
+            self.cursor_row = 0
+            self.cursor_col = 0
+
     def save_file(self):
         b = self.translate_lines_to_bytes()
-        with open('t.txt', 'rb+') as f:
-            bb = bytes(b)
+        with open(self.file_path, 'rb+') as f:
             f.seek(self.seek_pointer - self.get_window_size())
             f.write(bytes(b))
 
     def change_data(self, key):
         if key not in keys:
-            if ord('0') <= key <= ord('9'):
-                key -= ord('0')
-            elif ord('a') <= key <= ord('f'):
-                key = key - ord('a') + 10
-            val = format(key, 'x')
-            print(val)
-            # raise EOFError
+            new_val = convert_to_number(key)
             if self.offset == 0:
-                new_value = self.lines[self.cursor_row][self.cursor_col]
-                self.lines[self.cursor_row][self.cursor_col] = val + new_value[1:2]
+                cur_val = self.get_cur_val()
+                self.set_cur_val(new_val + cur_val[1:2])
             elif self.offset == 1:
-                new_value = self.lines[self.cursor_row][self.cursor_col]
-                self.lines[self.cursor_row][self.cursor_col] = new_value[0:1] + val
-                # print(new_value[0:1] + val)
-                # raise EOFError
-                self.lines[self.cursor_row][self.cursor_col] = new_value[0:1] + val
-
+                cur_val = self.get_cur_val()
+                self.set_cur_val(cur_val[0:1] + new_val)
+                self.set_cur_val(cur_val[0:1] + new_val)
             self.offset = (self.offset + 1) % 2
+
+    def get_cur_val(self):
+        return self.lines[self.cursor_row][self.cursor_col]
+
+    def set_cur_val(self, new_val):
+        self.lines[self.cursor_row][self.cursor_col] = new_val
 
 # t = FileManager()
 #
+# t.get_formatted_lines()
 # verdict = False
 # while True:
 #     d = input()

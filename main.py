@@ -12,20 +12,21 @@ def invert_hex(hex_value):
 
 class HexEditor:
     def __init__(self):
-        self.file_manager = FileManager()
-        self.seek_pointer = 0
-        self.window_size = 16 * 5
-        self.offset = 0
-        with open('t.txt', 'rb') as f:
-            self.data = f.read(self.window_size)
-
-        self.seek_pointer = len(self.data)
-
+        self.file_manager = None
         self.key = None
         self.begin = True
 
     def main_loop(self, stdscr):
         stdscr.clear()
+        self.file_manager = FileManager()
+        # filepath = input("Введите путь к файлу: ")
+        # try:
+        #     self.file_manager = FileManager(filepath)
+        # except FileNotFoundError:
+        #     stdscr.addstr(0, 0, "Файл не найден")
+        #     stdscr.getch()
+        #     return
+
         while True:
             stdscr.clear()
             if not self.begin:
@@ -33,13 +34,10 @@ class HexEditor:
             self.begin = False
             formatted_lines = self.file_manager.get_formatted_lines()
             for i in range(len(formatted_lines)):
-                stdscr.addstr(i, 0, formatted_lines[i])
-            # print(self.lines[self.cursor_row][self.cursor_col * 2])
-            # print(len(self.lines), self.cursor_row)
+                line = formatted_lines[i].replace('\x00', '')
+                stdscr.addstr(i, 0, line)
 
-            # if self.cursor_col >= len(self.lines[self.cursor_row]):
-            #     self.cursor_row = 0
-            #     self.cursor_col = 0
+
             stdscr.addstr(*self.file_manager.get_actual_position(),
                           curses.A_REVERSE)
             stdscr.refresh()
