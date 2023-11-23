@@ -30,7 +30,7 @@ class FileManager:
         self.file_path = file_path
         self.offset = 0
         self.seek_pointer = 0
-        self.window_size = 16 * 5
+        self.window_size = 16 * 18
         with open(file_path, 'rb') as f:
             self.data = f.read(self.window_size)
 
@@ -39,26 +39,29 @@ class FileManager:
         self.lines = parse_data_to_lines(self.data)
         self.cursor_row = 0
         self.cursor_col = 0
+        self.rows_offset = 0
 
     def get_formatted_lines(self):
         result = []
+        index = self.rows_offset+1
         for line in self.lines:
             result_i1 = []
             result_i2 = b''
+            binary_number = (hex(index)[2:]+'0').rjust(8, '0')
             for item in line:
                 ord_value = int(item, 16)
                 result_i1.append(item)
-
                 try:
                     result_i2 += bytes([ord_value])
                 except UnicodeDecodeError:
                     result_i2 += b'?'
-            formatted_line = ' '.join(result_i1).ljust(20) + ' ' + result_i2.decode('utf-8', errors='replace')
+            index+=1
+            formatted_line = binary_number + ' ' + ' '.join(result_i1).ljust(20) + ' ' + result_i2.decode('utf-8', errors='replace')
             result.append(formatted_line)
         return result
 
     def get_actual_position(self):
-        return self.cursor_row, self.cursor_col * 3, self.lines[self.cursor_row][self.cursor_col]
+        return self.cursor_row, self.cursor_col * 3 + 9, self.lines[self.cursor_row][self.cursor_col]
 
     def get_window_size(self):
         return sum(len(line) for line in self.lines)
@@ -71,6 +74,7 @@ class FileManager:
             if len(data) > 0:
                 lines = parse_data_to_lines(data)
                 self.lines = self.lines[1:] + lines
+                self.rows_offset += 1
                 return True
             return False
 
@@ -85,6 +89,7 @@ class FileManager:
                 lines = parse_data_to_lines(data)
                 self.lines = lines + self.lines[:-1]
                 self.seek_pointer += self.get_window_size()
+                self.rows_offset -=1
                 return True
             return False
 
