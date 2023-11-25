@@ -198,14 +198,20 @@ class FileManager:
             elif self.offset == 1:
                 cur_val = self.get_cur_val()
                 self.set_cur_val(cur_val[0:1] + new_val)
-                self.set_cur_val(cur_val[0:1] + new_val)
             self.offset = (self.offset + 1) % 2
 
     def get_cur_val(self):
         return self.lines[self.cursor_row+self.pointer][self.cursor_col % self.window_width]
 
     def set_cur_val(self, new_val):
-        self.lines[self.cursor_row+self.pointer][self.cursor_col % self.window_width] = new_val
+        y = self.cursor_row+self.pointer
+        x = self.cursor_col % self.window_width
+        self.lines[y][x] = new_val
+        for j in range(x, -1, -1):
+            self.lines[y][j] = self.lines[y][j].replace('_', '0')
+        for i in range(y-1, -1, -1):
+            for j in range(self.window_width-1, -1, -1):
+                self.lines[i][j] = self.lines[i][j].replace('_', '0')
 
     def insert(self, data):
         if len(self.lines) == self.window_height:
