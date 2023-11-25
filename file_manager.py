@@ -105,20 +105,22 @@ class FileManager:
             right = 0
             if last_row_contains_empty_cells:
                 for i in range(self.window_width):
-                    if '_' not in self.lines[self.pointer+self.cursor_row][i]:
+                    if '_' not in self.lines[self.pointer+self.cursor_row+1][i]:
                         right = i
                     else:
                         break
 
-                data = parse_data_to_line(f.read(self.window_width-right))
-                self.shift_right_and_insert_at_index(right, self.pointer+self.cursor_row, ''.join(data))
-            data = f.read(self.window_width)
+                data = parse_data_to_line(f.read(self.window_width-right-1))
+
+                self.shift_right_and_insert_at_index(2*(right+1), self.pointer+self.cursor_row+1, ''.join(data))
+            else:
+                data = f.read(self.window_width)
+                last_line = parse_data_to_line(data)
+                while len(last_line) < self.window_width:
+                    last_line += ['__']
+                self.lines += [last_line]
+                self.pointer += 1
             self.seek_pointer += len(data)
-            last_line = parse_data_to_line(data)
-            while len(last_line) < self.window_width:
-                last_line += ['__']
-            self.lines += [last_line]
-            self.pointer += 1
 
     def step_back_window(self):
         self.pointer = max(0, self.pointer - 1)
@@ -172,7 +174,7 @@ class FileManager:
             self.cursor_row -= 1
 
     def shift_cursor_down(self):
-        if self.cursor_row + self.pointer+1 == len(self.lines)-1 and any('_' in i for i in self.lines[self.pointer + self.cursor_row+1]):
+        if self.pointer + self.cursor_row+1 == len(self.lines) -1 and any('_' in i for i in self.lines[self.pointer + self.cursor_row+1]):
             self.step_forward_window(True)
             return
         if self.cursor_row + 1 < self.window_height:
@@ -207,7 +209,7 @@ class FileManager:
 
     def insert(self, data):
         if len(self.lines) == self.window_height:
-            self.lines += ['__' for _ in range(self.window_width)]
+            self.lines += [['__' for _ in range(self.window_width)]]
         for i in range(len(self.lines)-1, self.pointer + self.cursor_row, -1):
             str = ''.join(self.lines[i - 1])
             d = str[-len(data):]
@@ -219,7 +221,11 @@ class FileManager:
         newstr = string[:index] + data + string[index:]
         self.lines[row_number] = [newstr[i:i + 2] for i in range(0, self.window_width * 2, 2)]
 
-# t = FileManager()
+t = FileManager()
+
+t.get_formatted_lines()
+t.insert('111111')
+t.shift_cursor_down()
+t.shift_cursor_down()
+t.shift_cursor_down()
 #
-# t.get_formatted_lines()
-# t.insert('111111')
