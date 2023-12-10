@@ -1,4 +1,5 @@
 import curses
+import time
 from curses import wrapper
 from file_manager import FileManager
 
@@ -12,6 +13,8 @@ def invert_hex(hex_value):
 
 class HexEditor:
     def __init__(self, file_path, width, height, notation):
+        self.width = width
+        self.height = height
         self.file_manager = FileManager(file_path, width, height, notation)
         self.key = None
         self.begin = True
@@ -53,19 +56,28 @@ class HexEditor:
                 return
 
             if self.key == ord('s'):
-                self.display_popup(stdscr, "Save File")
+                curses.curs_set(False)
+                curses.start_color()
+                curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
+                message = "Файл сохранён"
+                height, width = 5, len(message) + 4
+                y, x = self.height // 3, (self.width * 3)//2
+
+                win = curses.newwin(height, width, y, x)
+
+                win.bkgd(' ', curses.color_pair(1))
+                win.box()
+                win.addstr(height // 2, (width - len(message)) // 2, message)
+                win.refresh()
+
+                time.sleep(2)
+
+                win.clear()
+                curses.curs_set(True)
+                curses.endwin()
+                del win
             self.file_manager.process_keys(self.key)
 
-    def display_popup(self, stdscr, popup_text):
-        popup_height = 10
-        popup_width = len(popup_text) + 4
-        screen_height, screen_width = stdscr.getmaxyx()
-        popup_y = (screen_height - popup_height) // 2
-        popup_x = (screen_width - popup_width) // 2
-        popup_win = curses.newwin(popup_height, popup_width, popup_y, popup_x)
-        popup_win.addstr(2, 2, popup_text, curses.A_BOLD)
-        stdscr.timeout(2)
-        del popup_win
 
     def run(self):
         wrapper(self.main_loop)

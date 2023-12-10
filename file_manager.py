@@ -144,8 +144,8 @@ class FileManager:
     def shift_cursor_right(self):
         self.cursor_col += 1
         if self.cursor_col >= 2 * self.window_width:
-            if self.cursor_row + 1 < self.window_height:
-                self.cursor_row += 1
+            if self.cursor_row + 1 <= self.window_height:
+                self.shift_cursor_down()
                 self.cursor_col = 0
 
     def shift_cursor_left(self):
@@ -182,17 +182,21 @@ class FileManager:
             f.write(bytes(b))
 
     def change_data(self, key):
-        if key not in keys:
-            new_val = self.convert_to_number(key)
-            cur_val = self.get_cur_val()
-            self.undo_stack += [([self.get_pos_y(), self.get_pos_x()], cur_val)]
-            if self.offset == 0:
-                self.set_cur_val(new_val + cur_val[1:2])
-            elif self.offset == 1:
-                self.set_cur_val(cur_val[0:1] + new_val)
-                self.shift_cursor_right()
-                # self.offset = 0
-            self.offset = (self.offset + 1) % 2
+        new_val = self.convert_to_number(key)
+        if new_val is None:
+            return
+        cur_val = self.get_cur_val()
+        self.undo_stack += [([self.get_pos_y(), self.get_pos_x()], cur_val)]
+        if self.offset == 0:
+            self.set_cur_val(new_val + cur_val[1:2])
+        elif self.offset == 1:
+            self.set_cur_val(cur_val[0:1] + new_val)
+            self.shift_cursor_right()
+            if self.cursor_col == self.window_width:
+                self.shift_cursor_down()
+                self.cursor_col = 0
+            # self.offset = 0
+        self.offset = (self.offset + 1) % 2
 
     def get_pos_y(self):
         return self.cursor_row + self.pointer
@@ -275,11 +279,11 @@ class FileManager:
         val = format(key, 'x')
         if key in self.chars_by_notation[self.notation]:
             return val
-        raise ValueError
+        # raise ValueError(key)
 
 
-t = FileManager('e1231.txt')
-t.process_keys(ord('s'))
+# t = FileManager('e1231.txt')
+# t.process_keys(ord('s'))
 # t.process_keys(curses.KEY_DOWN)
 #
 # t.change_data(ord('f'))

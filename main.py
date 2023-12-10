@@ -9,7 +9,7 @@ def parse_arguments():
     parser.add_argument('--notation', '-n', type=str, default='hex', choices=['bin', 'oct', 'dec', 'hex'], help='Notation')
     parser.add_argument('--width', '-w', type=int, default=10, help='Window width')
     parser.add_argument('--height', type=int, default=10, help='Window height')
-    parser.add_argument('--file', type=str, default='t.txt', help='Path to the file')
+    parser.add_argument('file', type=str, default='t.txt', help='Path to the file')
     args = parser.parse_args()
     return args
 
