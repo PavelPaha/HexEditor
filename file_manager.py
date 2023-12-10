@@ -3,25 +3,17 @@ import curses
 keys = [curses.KEY_CONTROL_L, curses.KEY_DOWN, curses.KEY_UP, curses.KEY_LEFT, curses.KEY_RIGHT, ord('s'), ord('z')]
 
 
-def convert_to_number(key):
-    if ord('0') <= key <= ord('9'):
-        key -= ord('0')
-    elif ord('a') <= key <= ord('f'):
-        key = key - ord('a') + 10
-    val = format(key, 'x')
-    return val
-
 
 class FileManager:
-    def __init__(self, file_path='t.txt', notation='hex'):
+    def __init__(self, file_path='t.txt', width=10, height=16, notation='hex'):
         self.undo_stack = []
         self.notation = notation
         self.pointer = 0
         self.file_path = file_path
         self.offset = 0
         self.seek_pointer = 0
-        self.window_width = 16
-        self.window_height = 10
+        self.window_width = width
+        self.window_height = height
         self.window_size = self.window_width * self.window_height
         self.cursor_row = 0
         self.cursor_col = 0
@@ -33,13 +25,14 @@ class FileManager:
             self.data = f.read(self.window_size)
         self.seek_pointer = len(self.data)
         self.lines = self.parse_data_to_lines(self.data)
+        if len(self.lines) == 0:
+            self.lines += [[]]
         last_line = self.lines[-1]
-
         while len(last_line) < self.window_width:
             last_line += ['__']
-
         self.lines[-1] = last_line
-        self.step_forward_window(True)
+
+        # self.step_forward_window(True)
         while len(self.lines) < self.window_height:
             self.step_forward_window(False)
         self.pointer = 0
@@ -68,7 +61,7 @@ class FileManager:
                     result_i2 += b'?'
 
             index += 1
-            formatted_line = binary_number + ' ' + ' '.join(result_i1).ljust(48)
+            formatted_line = binary_number + ' ' + ' '.join(result_i1).ljust(self.window_width*3)
             formatted_line += ''.join(
                 [bytes([item]).decode('utf-8', errors='replace') if ord(b'\x20') <= item <= ord(b'\x7E') else '.' for
                  item in result_i2])
@@ -79,13 +72,13 @@ class FileManager:
     def get_actual_position(self):
         l = len(self.lines[self.cursor_row + self.pointer])
         if self.cursor_col >= len(self.lines[self.cursor_row]):
-            answer = self.lines[self.cursor_row][self.cursor_col - l]
+            answer = self.lines[self.get_pos_y()][self.cursor_col - l]
             if '_' in answer:
                 value = ' '
             else:
                 value = str(bytes([int(answer, 16)]).decode('utf-8', errors='replace'))
             return self.cursor_row + 1, self.window_width * 3 + 9 + self.cursor_col - l, value
-        return self.cursor_row + 1, self.cursor_col * 3 + 9, self.lines[self.cursor_row][self.cursor_col]
+        return self.cursor_row + 1, self.cursor_col * 3 + 9, self.lines[self.get_pos_y()][self.get_pos_x()]
 
     def get_window_size(self):
         return sum(len(line) for line in self.lines)
@@ -116,10 +109,10 @@ class FileManager:
         self.pointer = max(0, self.pointer - 1)
         return True
 
-    def translate_lines_to_bytes(self):
+    def translate_buffer_to_bytes(self):
         byte_data = []
-        for line in self.lines:
-            hex_data = ''.join(line)
+        for line in self.buffer:
+            hex_data = ''.join(line).replace('_','')
             byte_data += bytes.fromhex(hex_data)
         return byte_data
 
@@ -140,6 +133,8 @@ class FileManager:
             #     self.insert('111111')
             elif key == ord('z'):
                 self.undo()
+        else:
+            self.change_data(key)
                 # self.insert('111111')
 
         # if self.cursor_col >= len(self.lines[self.cursor_row]):
@@ -167,27 +162,28 @@ class FileManager:
             self.cursor_row -= 1
 
     def shift_cursor_down(self):
+        if self.cursor_row + 1 < self.window_height:
+            self.cursor_row += 1
+            return
         if self.pointer + self.cursor_row + 1 == len(self.lines) - 1 and any(
                 '_' in i for i in self.lines[self.pointer + self.cursor_row + 1]):
             self.step_forward_window(True)
-            self.cursor_row += 1
+
             return
-        if self.cursor_row + 1 < self.window_height:
-            self.cursor_row += 1
-        elif self.pointer + self.cursor_row + 1 < self.window_height:
-            self.pointer += 1
-        else:
-            self.step_forward_window(False)
+        self.step_forward_window(False)
+        # elif self.pointer + self.cursor_row + 1 < self.window_height:
+        #     self.pointer += 1
+        #
 
     def save_file(self):
-        b = self.translate_lines_to_bytes()
+        b = self.translate_buffer_to_bytes()
         with open(self.file_path, 'rb+') as f:
-            f.seek(self.seek_pointer - self.get_window_size())
+            f.seek(0)
             f.write(bytes(b))
 
     def change_data(self, key):
         if key not in keys:
-            new_val = convert_to_number(key)
+            new_val = self.convert_to_number(key)
             cur_val = self.get_cur_val()
             self.undo_stack += [([self.get_pos_y(), self.get_pos_x()], cur_val)]
             if self.offset == 0:
@@ -236,8 +232,8 @@ class FileManager:
 
     def parse_data_to_lines(self, data):
         result = []
-        for i in range(0, len(data), 16):
-            result_i = self.parse_data_to_line(data[i:i + 16])
+        for i in range(0, len(data), self.window_width):
+            result_i = self.parse_data_to_line(data[i:i + self.window_width])
             result += [result_i]
         return result
 
@@ -264,10 +260,27 @@ class FileManager:
         val = top[1]
         self.set_cur_val(val, x=x, y=y)
 
-t = FileManager()
-for i in range(8):
-    t.process_keys(curses.KEY_DOWN)
-t.process_keys(curses.KEY_DOWN)
+    chars_by_notation = {
+        'bin': list(range(2)),
+        'oct': list(range(8)),
+        'dec': list(range(10)),
+        'hex': list(range(16))
+    }
+
+    def convert_to_number(self, key):
+        if ord('0') <= key <= ord('9'):
+            key -= ord('0')
+        elif ord('a') <= key <= ord('f'):
+            key = key - ord('a') + 10
+        val = format(key, 'x')
+        if key in self.chars_by_notation[self.notation]:
+            return val
+        raise ValueError
+
+
+t = FileManager('e1231.txt')
+t.process_keys(ord('s'))
+# t.process_keys(curses.KEY_DOWN)
 #
 # t.change_data(ord('f'))
 # t.process_keys(ord('z'))

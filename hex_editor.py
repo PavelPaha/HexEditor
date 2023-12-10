@@ -11,8 +11,8 @@ def invert_hex(hex_value):
 
 
 class HexEditor:
-    def __init__(self, file_path):
-        self.file_manager = FileManager(file_path)
+    def __init__(self, file_path, width, height, notation):
+        self.file_manager = FileManager(file_path, width, height, notation)
         self.key = None
         self.begin = True
 
@@ -29,8 +29,8 @@ class HexEditor:
 
         while True:
             stdscr.clear()
-            if not self.begin:
-                self.file_manager.change_data(self.key)
+            # if not self.begin and self.key != ord('s'):
+            #     self.file_manager.change_data(self.key)
             self.begin = False
             formatted_lines = self.file_manager.get_formatted_lines()
             for i in range(len(formatted_lines)):
@@ -49,10 +49,11 @@ class HexEditor:
 
             stdscr.refresh()
             self.key = stdscr.getch()
-            # if self.key == ord('s') or self.key == ord('S'):
-            #     self.display_popup(stdscr, "Save File")
             if self.key == ord('q') or self.key == ord('Q'):
                 return
+
+            if self.key == ord('s'):
+                self.display_popup(stdscr, "Save File")
             self.file_manager.process_keys(self.key)
 
     def display_popup(self, stdscr, popup_text):
@@ -62,11 +63,9 @@ class HexEditor:
         popup_y = (screen_height - popup_height) // 2
         popup_x = (screen_width - popup_width) // 2
         popup_win = curses.newwin(popup_height, popup_width, popup_y, popup_x)
-        popup_win.box()
         popup_win.addstr(2, 2, popup_text, curses.A_BOLD)
-        popup_win.refresh()
         stdscr.timeout(2)
-
         del popup_win
+
     def run(self):
         wrapper(self.main_loop)
