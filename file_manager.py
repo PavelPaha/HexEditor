@@ -1,24 +1,6 @@
 import curses
 
-keys = [curses.KEY_DOWN, curses.KEY_UP, curses.KEY_LEFT, curses.KEY_RIGHT, ord('s'), ord('y')]
-
-
-def parse_data_to_lines(data):
-    result = []
-    for i in range(0, len(data), 16):
-        result_i = parse_data_to_line(data[i:i + 16])
-        result += [result_i]
-    return result
-
-
-def parse_data_to_line(data):
-    result_i = []
-    for j in data:
-        item = format(j, 'x')
-        if len(item) == 1:
-            item = '0' + item
-        result_i += [item]
-    return result_i
+keys = [curses.KEY_CONTROL_L, curses.KEY_DOWN, curses.KEY_UP, curses.KEY_LEFT, curses.KEY_RIGHT, ord('s'), ord('z')]
 
 
 def convert_to_number(key):
@@ -31,34 +13,44 @@ def convert_to_number(key):
 
 
 class FileManager:
-    def __init__(self, file_path='t.txt'):
+    def __init__(self, file_path='t.txt', notation='hex'):
+        self.undo_stack = []
+        self.notation = notation
         self.pointer = 0
-
         self.file_path = file_path
         self.offset = 0
         self.seek_pointer = 0
         self.window_width = 16
         self.window_height = 10
         self.window_size = self.window_width * self.window_height
-        with open(file_path, 'rb') as f:
-            self.data = f.read(self.window_size)
-
-        self.seek_pointer = len(self.data)
-
-        self.lines = parse_data_to_lines(self.data)
-        self.buffer = self.lines
         self.cursor_row = 0
         self.cursor_col = 0
         self.cursor_str_col = 0
         self.rows_offset = 0
         self.in_table = True
 
+        with open(file_path, 'rb') as f:
+            self.data = f.read(self.window_size)
+        self.seek_pointer = len(self.data)
+        self.lines = self.parse_data_to_lines(self.data)
+        last_line = self.lines[-1]
+
+        while len(last_line) < self.window_width:
+            last_line += ['__']
+
+        self.lines[-1] = last_line
+        self.step_forward_window(True)
+        while len(self.lines) < self.window_height:
+            self.step_forward_window(False)
+        self.pointer = 0
+        self.buffer = self.lines
+
     def get_formatted_lines(self):
         result = []
         index = self.pointer + self.rows_offset + 1
 
-        for i in range(self.pointer, min(self.pointer+self.window_height, len(self.lines))):
-            line =  self.lines[i]
+        for i in range(self.pointer, self.pointer + self.window_height):
+            line = self.lines[i]
             result_i1 = []
             result_i2 = b''
             binary_number = (hex(index)[2:] + '0').rjust(8, '0')
@@ -85,16 +77,15 @@ class FileManager:
         return result
 
     def get_actual_position(self):
-        row_number = self.pointer + self.cursor_row
-        l = len(self.lines[row_number])
-        if self.cursor_col >= len(self.lines[row_number]):
-            answer = self.lines[row_number][self.cursor_col - l]
+        l = len(self.lines[self.cursor_row + self.pointer])
+        if self.cursor_col >= len(self.lines[self.cursor_row]):
+            answer = self.lines[self.cursor_row][self.cursor_col - l]
             if '_' in answer:
                 value = ' '
             else:
                 value = str(bytes([int(answer, 16)]).decode('utf-8', errors='replace'))
-            return self.cursor_row+1, self.window_width * 3 + 9 + self.cursor_col - l, value
-        return self.cursor_row+1, self.cursor_col * 3 + 9, self.lines[row_number][self.cursor_col]
+            return self.cursor_row + 1, self.window_width * 3 + 9 + self.cursor_col - l, value
+        return self.cursor_row + 1, self.cursor_col * 3 + 9, self.lines[self.cursor_row][self.cursor_col]
 
     def get_window_size(self):
         return sum(len(line) for line in self.lines)
@@ -105,17 +96,16 @@ class FileManager:
             right = 0
             if last_row_contains_empty_cells:
                 for i in range(self.window_width):
-                    if '_' not in self.lines[self.pointer+self.cursor_row+1][i]:
+                    cr = self.cursor_row
+                    if '_' not in self.lines[self.pointer + cr + 1][i]:
                         right = i
                     else:
                         break
-
-                data = parse_data_to_line(f.read(self.window_width-right-1))
-
-                self.shift_right_and_insert_at_index(2*(right+1), self.pointer+self.cursor_row+1, ''.join(data))
+                data = self.parse_data_to_line(f.read(self.window_width - right - 1))
+                self.shift_right_and_insert_at_index(2 * (right + 1), self.pointer + self.cursor_row + 1, ''.join(data))
             else:
                 data = f.read(self.window_width)
-                last_line = parse_data_to_line(data)
+                last_line = self.parse_data_to_line(data)
                 while len(last_line) < self.window_width:
                     last_line += ['__']
                 self.lines += [last_line]
@@ -146,8 +136,11 @@ class FileManager:
                 self.shift_cursor_right()
             elif key == ord('s'):
                 self.save_file()
-            elif key == ord('y'):
-                self.insert('111111')
+            # elif key == curses.KEY_CONTROL_L and key == ord('v'):
+            #     self.insert('111111')
+            elif key == ord('z'):
+                self.undo()
+                # self.insert('111111')
 
         # if self.cursor_col >= len(self.lines[self.cursor_row]):
         #     self.cursor_row = 0
@@ -155,7 +148,7 @@ class FileManager:
 
     def shift_cursor_right(self):
         self.cursor_col += 1
-        if self.cursor_col >= 2*self.window_width:
+        if self.cursor_col >= 2 * self.window_width:
             if self.cursor_row + 1 < self.window_height:
                 self.cursor_row += 1
                 self.cursor_col = 0
@@ -165,7 +158,7 @@ class FileManager:
         if self.cursor_col < 0:
             self.step_back_window()
             self.cursor_row = (self.cursor_row - 1 + self.window_height) % self.window_height
-            self.cursor_col = 2*self.window_width - 1
+            self.cursor_col = 2 * self.window_width - 1
 
     def shift_cursor_up(self):
         if self.cursor_row == 0:
@@ -174,8 +167,10 @@ class FileManager:
             self.cursor_row -= 1
 
     def shift_cursor_down(self):
-        if self.pointer + self.cursor_row+1 == len(self.lines) -1 and any('_' in i for i in self.lines[self.pointer + self.cursor_row+1]):
+        if self.pointer + self.cursor_row + 1 == len(self.lines) - 1 and any(
+                '_' in i for i in self.lines[self.pointer + self.cursor_row + 1]):
             self.step_forward_window(True)
+            self.cursor_row += 1
             return
         if self.cursor_row + 1 < self.window_height:
             self.cursor_row += 1
@@ -183,6 +178,7 @@ class FileManager:
             self.pointer += 1
         else:
             self.step_forward_window(False)
+
     def save_file(self):
         b = self.translate_lines_to_bytes()
         with open(self.file_path, 'rb+') as f:
@@ -192,46 +188,94 @@ class FileManager:
     def change_data(self, key):
         if key not in keys:
             new_val = convert_to_number(key)
+            cur_val = self.get_cur_val()
+            self.undo_stack += [([self.get_pos_y(), self.get_pos_x()], cur_val)]
             if self.offset == 0:
-                cur_val = self.get_cur_val()
                 self.set_cur_val(new_val + cur_val[1:2])
             elif self.offset == 1:
-                cur_val = self.get_cur_val()
                 self.set_cur_val(cur_val[0:1] + new_val)
+                self.shift_cursor_right()
+                # self.offset = 0
             self.offset = (self.offset + 1) % 2
 
-    def get_cur_val(self):
-        return self.lines[self.cursor_row+self.pointer][self.cursor_col % self.window_width]
+    def get_pos_y(self):
+        return self.cursor_row + self.pointer
 
-    def set_cur_val(self, new_val):
-        y = self.cursor_row+self.pointer
-        x = self.cursor_col % self.window_width
+    def get_pos_x(self):
+        return self.cursor_col % self.window_width
+
+    def get_cur_val(self):
+        return self.lines[self.get_pos_y()][self.get_pos_x()]
+
+    def set_cur_val(self, new_val, y=None, x=None):
+        if x is None and y is None:
+            y = self.get_pos_y()
+            x = self.get_pos_x()
         self.lines[y][x] = new_val
         for j in range(x, -1, -1):
             self.lines[y][j] = self.lines[y][j].replace('_', '0')
-        for i in range(y-1, -1, -1):
-            for j in range(self.window_width-1, -1, -1):
+        for i in range(y - 1, -1, -1):
+            for j in range(self.window_width - 1, -1, -1):
                 self.lines[i][j] = self.lines[i][j].replace('_', '0')
 
     def insert(self, data):
+        return
         if len(self.lines) == self.window_height:
             self.lines += [['__' for _ in range(self.window_width)]]
-        for i in range(len(self.lines)-1, self.pointer + self.cursor_row, -1):
+        for i in range(len(self.lines) - 1, self.pointer + self.cursor_row, -1):
             str = ''.join(self.lines[i - 1])
             d = str[-len(data):]
             self.shift_right_and_insert_at_index(0, i, d)
-        self.shift_right_and_insert_at_index(2*(self.cursor_col % self.window_width), self.pointer + self.cursor_row, data)
+        self.shift_right_and_insert_at_index(2 * (self.cursor_col % self.window_width), self.pointer + self.cursor_row,
+                                             data)
 
     def shift_right_and_insert_at_index(self, index, row_number, data):
         string = ''.join(self.lines[row_number])
         newstr = string[:index] + data + string[index:]
         self.lines[row_number] = [newstr[i:i + 2] for i in range(0, self.window_width * 2, 2)]
 
-t = FileManager()
+    def parse_data_to_lines(self, data):
+        result = []
+        for i in range(0, len(data), 16):
+            result_i = self.parse_data_to_line(data[i:i + 16])
+            result += [result_i]
+        return result
 
-t.get_formatted_lines()
-t.insert('111111')
-t.shift_cursor_down()
-t.shift_cursor_down()
-t.shift_cursor_down()
+    def parse_data_to_line(self, data):
+        result_i = []
+        for j in data:
+            if self.notation == 'hex':
+                item = format(j, 'x')
+            elif self.notation == 'oct':
+                item = oct(j)[2:]
+            elif self.notation == 'bin':
+                item = bin(j)[2:]
+            else:
+                item = str(j)
+            if len(item) == 1:
+                item = '0' + item
+            result_i += [item]
+        return result_i
+
+    def undo(self):
+        top = self.undo_stack[-1]
+        self.undo_stack = self.undo_stack[:-1]
+        (y, x) = top[0]
+        val = top[1]
+        self.set_cur_val(val, x=x, y=y)
+
+t = FileManager()
+for i in range(8):
+    t.process_keys(curses.KEY_DOWN)
+t.process_keys(curses.KEY_DOWN)
 #
+# t.change_data(ord('f'))
+# t.process_keys(ord('z'))
+# t.process_keys(ord('z'))
+# # t.get_formatted_lines()
+# # t.insert('caccac')
+# # t.change_data(ord('4'))
+# # t.shift_cursor_down()
+# # t.shift_cursor_down()
+# # t.shift_cursor_down()
+# # #

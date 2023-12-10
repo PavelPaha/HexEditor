@@ -12,10 +12,9 @@ def invert_hex(hex_value):
 
 class HexEditor:
     def __init__(self, file_path):
-        self.file_manager =  FileManager(file_path)
+        self.file_manager = FileManager(file_path)
         self.key = None
         self.begin = True
-
 
 
     def main_loop(self, stdscr):
